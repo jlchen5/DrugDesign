@@ -21,3 +21,5 @@ pip install pandas rdkit scikit-learn matplotlib
 - Open Babel (http://openbabel.org/wiki/Main_Page)
 
 
+## License
+This project is available under the [MIT License](https://github.com/jlchen5/DrugDesign/blob/main/LICENSE).
