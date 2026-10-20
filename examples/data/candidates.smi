@@ -1,0 +1,5 @@
+# SMILES  name
+CCOc1ccccc1NC(=O)C  phenacetin_isomer
+COc1cc2ncnc(Nc3cccc(Cl)c3)c2cc1OC  quinazoline_analog
+Cc1ccc(NC(=O)c2ccccc2)cc1  benzanilide
+CN1CCN(CC1)c1ccc(Nc2ncc(F)c(n2)-c2ccccc2)cc1  aminopyrimidine
