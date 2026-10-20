@@ -1,0 +1,38 @@
+# Example end-to-end workflow: `drugdesign run examples/config.toml`
+# Relative paths are resolved against this file's directory.
+
+plugins = []          # e.g. ["plugins/custom_featurizer.py"]
+output = "../outputs/predictions.csv"
+
+[data]
+path = "data/demo_activity.csv"
+smiles_col = "smiles"
+target_col = "pIC50"
+# value_col = "standard_value"   # derive pIC50 from raw nM values (ChEMBL export)
+standardize = true
+aggregate = "median"
+
+[model]
+featurizer = [{ name = "morgan", radius = 2, n_bits = 2048 }, "basic_descriptors"]
+estimator = "random_forest"
+params = { n_estimators = 300 }
+test_size = 0.2
+cv_folds = 5
+random_state = 42
+save_path = "../outputs/model.joblib"
+
+[predict]
+input_path = "data/candidates.smi"
+smiles = ["Cc1ccc(cc1)S(=O)(=O)Nc1ccccn1"]   # inline candidates, combined with input_path
+druglikeness = true
+
+[docking]
+enabled = false                 # needs AutoDock Vina + Meeko/Open Babel installed
+receptor = "target_protein.pdb"
+center = [10.0, 12.5, -3.0]
+size = [20.0, 20.0, 20.0]
+# reference_ligand = "ligand_in_pocket.sdf"
+exhaustiveness = 8
+num_modes = 9
+top_n = 10
+output_dir = "../outputs/docking"
