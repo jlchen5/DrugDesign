@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 PathLike = Union[str, Path]
 
 # Multipliers that convert a concentration unit to molar.
-_UNIT_TO_MOLAR = {"m": 1.0, "mm": 1e-3, "um": 1e-6, "µm": 1e-6, "nm": 1e-9, "pm": 1e-12}
+_UNIT_TO_MOLAR = {"m": 1.0, "mm": 1e-3, "um": 1e-6, "µm": 1e-6, "μm": 1e-6, "nm": 1e-9, "pm": 1e-12}
 
 
 def quiet_rdkit(quiet: bool = True) -> None:
@@ -38,14 +38,15 @@ def to_pactivity(values: Union[float, Sequence[float], np.ndarray], unit: str = 
         raise ValueError(f"Unsupported unit '{unit}'. Use one of {sorted(_UNIT_TO_MOLAR)}")
     arr = np.asarray(values, dtype=float) * factor
     with np.errstate(divide="ignore", invalid="ignore"):
-        return np.where(arr > 0, -np.log10(arr), np.nan)
+        return np.where((arr > 0) & np.isfinite(arr), -np.log10(arr), np.nan)
 
 
 def mol_from_smiles(smiles: Optional[str]) -> Optional[Chem.Mol]:
     """Parse a SMILES string, returning None for empty or invalid input."""
     if not isinstance(smiles, str) or not smiles.strip():
         return None
-    return Chem.MolFromSmiles(smiles.strip())
+    mol = Chem.MolFromSmiles(smiles.strip())
+    return mol if mol is not None and mol.GetNumAtoms() > 0 else None
 
 
 def mols_from_smiles(smiles: Iterable[Optional[str]]) -> List[Optional[Chem.Mol]]:
@@ -62,8 +63,9 @@ def _uncharger() -> rdMolStandardize.Uncharger:
     return rdMolStandardize.Uncharger()
 
 
-def standardize_smiles(smiles: Optional[str], keep_largest_fragment: bool = True,
-                       neutralize: bool = True) -> Optional[str]:
+def standardize_smiles(
+    smiles: Optional[str], keep_largest_fragment: bool = True, neutralize: bool = True
+) -> Optional[str]:
     """Return a canonical SMILES (salts stripped, charges neutralised) or None if invalid."""
     mol = mol_from_smiles(smiles)
     if mol is None:
@@ -85,12 +87,16 @@ def load_activity_data(
     value_col: Optional[str] = None,
     unit: str = "nM",
     sep: Optional[str] = None,
+    unit_col: Optional[str] = None,
+    relation_col: Optional[str] = None,
 ) -> pd.DataFrame:
     """Read a CSV/TSV file and return a frame with ``smiles`` and ``target_col`` columns.
 
     If ``target_col`` is missing but ``value_col`` (e.g. ChEMBL ``standard_value``
     in nM) is given, p-activities are computed from it.
     """
+    if target_col == "smiles":
+        raise ValueError("target_col cannot be 'smiles'")
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Activity file not found: {path}")
@@ -104,19 +110,43 @@ def load_activity_data(
     if smiles_col not in df.columns:
         raise KeyError(f"SMILES column '{smiles_col}' not in {list(df.columns)}")
 
+    relation_col = relation_col or ("standard_relation" if "standard_relation" in df else None)
+    if relation_col:
+        if relation_col not in df:
+            raise KeyError(f"Relation column '{relation_col}' not found")
+        # Censored measurements (<, >, <=, >=) are not exact regression targets.
+        exact = df[relation_col].astype("string").str.strip().eq("=").fillna(False)
+        logger.info("Removed %d non-exact/unknown activity measurements", (~exact).sum())
+        df = df.loc[exact].copy()
+
     if target_col not in df.columns:
         if value_col is None or value_col not in df.columns:
             raise KeyError(
                 f"Target column '{target_col}' not found and no usable value_col given "
                 f"(columns: {list(df.columns)})"
             )
-        df[target_col] = to_pactivity(pd.to_numeric(df[value_col], errors="coerce"), unit)
+        unit_col = unit_col or ("standard_units" if "standard_units" in df else None)
+        values = pd.to_numeric(df[value_col], errors="coerce")
+        if unit_col:
+            if unit_col not in df:
+                raise KeyError(f"Unit column '{unit_col}' not found")
+            units = df[unit_col].astype("string").str.strip().str.lower()
+            factors = units.map(_UNIT_TO_MOLAR)
+            if factors.isna().any():
+                raise ValueError(f"Unsupported or missing units in '{unit_col}'")
+            df[target_col] = to_pactivity(values.to_numpy() * factors.to_numpy(dtype=float), "M")
+        else:
+            df[target_col] = to_pactivity(values, unit)
 
-    out = pd.DataFrame({
-        "smiles": df[smiles_col],
-        target_col: pd.to_numeric(df[target_col], errors="coerce"),
-    })
-    return out.dropna().reset_index(drop=True)
+    out = pd.DataFrame(
+        {
+            "smiles": df[smiles_col],
+            target_col: pd.to_numeric(df[target_col], errors="coerce"),
+        }
+    )
+    return (
+        out.replace({target_col: {np.inf: np.nan, -np.inf: np.nan}}).dropna().reset_index(drop=True)
+    )
 
 
 def clean_dataset(
@@ -124,13 +154,21 @@ def clean_dataset(
     target_col: str = "pIC50",
     standardize: bool = True,
     aggregate: str = "median",
+    classification: bool = False,
 ) -> pd.DataFrame:
     """Drop invalid structures and merge duplicate compounds.
 
     Duplicates (same canonical SMILES) are aggregated with ``aggregate``
     ('mean', 'median', 'max', 'min' or 'first').
     """
+    if aggregate not in {"mean", "median", "max", "min", "first"}:
+        raise ValueError("aggregate must be mean, median, max, min or first")
+    if target_col == "smiles":
+        raise ValueError("target_col cannot be 'smiles'")
     n_in = len(df)
+    df = df.copy()
+    df[target_col] = pd.to_numeric(df[target_col], errors="coerce")
+    df[target_col] = df[target_col].replace([np.inf, -np.inf], np.nan)
     df = df.dropna(subset=["smiles", target_col]).copy()
     if standardize:
         df["smiles"] = [standardize_smiles(s) for s in df["smiles"]]
@@ -141,10 +179,17 @@ def clean_dataset(
     n_invalid = int(df["smiles"].isna().sum())
     df = df.dropna(subset=["smiles"])
 
+    if classification:
+        if not np.equal(df[target_col], np.floor(df[target_col])).all():
+            raise ValueError("Classification targets must be integer labels")
+        if (df.groupby("smiles")[target_col].nunique() > 1).any():
+            raise ValueError("Duplicate structures have conflicting class labels")
     df = df.groupby("smiles", as_index=False, sort=False)[target_col].agg(aggregate)
     logger.info(
         "Cleaned dataset: %d rows in, %d invalid SMILES removed, %d unique compounds out",
-        n_in, n_invalid, len(df),
+        n_in,
+        n_invalid,
+        len(df),
     )
     return df.reset_index(drop=True)
 
@@ -154,8 +199,8 @@ def read_smiles_file(path: PathLike, smiles_col: str = "smiles") -> pd.DataFrame
     path = Path(path)
     if path.suffix.lower() in {".smi", ".smiles", ".txt"}:
         rows = []
-        for line in path.read_text().splitlines():
-            parts = line.split()
+        for line in path.read_text(encoding="utf-8-sig").splitlines():
+            parts = line.split(maxsplit=1)
             if not parts or parts[0].startswith("#"):
                 continue
             rows.append({"smiles": parts[0], "name": parts[1] if len(parts) > 1 else None})
@@ -164,4 +209,6 @@ def read_smiles_file(path: PathLike, smiles_col: str = "smiles") -> pd.DataFrame
     df = pd.read_csv(path, sep=sep)
     if smiles_col not in df.columns:
         raise KeyError(f"SMILES column '{smiles_col}' not in {list(df.columns)}")
+    if smiles_col != "smiles" and "smiles" in df.columns:
+        raise ValueError("Input already contains 'smiles'; renaming would create duplicate columns")
     return df.rename(columns={smiles_col: "smiles"})

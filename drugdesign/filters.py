@@ -13,6 +13,20 @@ from rdkit.Chem.FilterCatalog import FilterCatalog, FilterCatalogParams
 
 from .data import mol_from_smiles
 
+PROFILE_COLUMNS = [
+    "mw",
+    "logp",
+    "hbd",
+    "hba",
+    "tpsa",
+    "rotatable_bonds",
+    "qed",
+    "lipinski_violations",
+    "lipinski_pass",
+    "veber_pass",
+    "pains_alert",
+]
+
 
 @lru_cache(maxsize=None)
 def _pains_catalog() -> FilterCatalog:
@@ -23,7 +37,7 @@ def _pains_catalog() -> FilterCatalog:
 
 def druglikeness_profile(mol: Optional[Chem.Mol]) -> Dict[str, object]:
     """Compute common drug-likeness properties for a single molecule."""
-    if mol is None:
+    if mol is None or mol.GetNumAtoms() == 0:
         return {}
     mw = Descriptors.MolWt(mol)
     logp = Crippen.MolLogP(mol)
@@ -51,17 +65,23 @@ def druglikeness_profile(mol: Optional[Chem.Mol]) -> Dict[str, object]:
 def druglikeness_table(smiles: Sequence[str]) -> pd.DataFrame:
     """Drug-likeness profile for each SMILES (rows for invalid SMILES are NaN)."""
     rows = [druglikeness_profile(mol_from_smiles(s)) for s in smiles]
-    frame = pd.DataFrame(rows, index=range(len(rows)))
-    if frame.empty:
-        frame = pd.DataFrame(index=range(len(rows)))
+    frame = pd.DataFrame(rows, index=range(len(rows)), columns=PROFILE_COLUMNS)
     frame.insert(0, "smiles", list(smiles))
     return frame
 
 
-def passes_filters(profile: Dict[str, object], max_lipinski_violations: int = 1,
-                   require_veber: bool = True, reject_pains: bool = True,
-                   min_qed: float = 0.0) -> bool:
-    if not profile:
+def passes_filters(
+    profile: Dict[str, object],
+    max_lipinski_violations: int = 1,
+    require_veber: bool = True,
+    reject_pains: bool = True,
+    min_qed: float = 0.0,
+) -> bool:
+    if not {"lipinski_violations", "veber_pass", "pains_alert", "qed"} <= profile.keys():
+        return False
+    if any(
+        pd.isna(profile[k]) for k in ("lipinski_violations", "veber_pass", "pains_alert", "qed")
+    ):
         return False
     if profile["lipinski_violations"] > max_lipinski_violations:
         return False

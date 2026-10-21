@@ -16,13 +16,20 @@ def test_example_config_loads():
 
 
 def test_run_pipeline(demo_csv, tmp_path):
-    cfg = PipelineConfig.from_dict({
-        "data": {"path": str(demo_csv)},
-        "model": {"featurizer": "basic_descriptors", "params": {"n_estimators": 50},
-                  "cv_folds": 3, "save_path": str(tmp_path / "model.joblib")},
-        "predict": {"smiles": ["CCOc1ccccc1NC(=O)C", "bad"]},
-        "output": str(tmp_path / "pred.csv"),
-    })
+    cfg = PipelineConfig.from_dict(
+        {
+            "data": {"path": str(demo_csv)},
+            "model": {
+                "featurizer": "basic_descriptors",
+                "params": {"n_estimators": 50},
+                "cv_folds": 3,
+                "save_path": str(tmp_path / "model.joblib"),
+                "report_path": str(tmp_path / "report.json"),
+            },
+            "predict": {"smiles": ["CCOc1ccccc1NC(=O)C", "bad"]},
+            "output": str(tmp_path / "pred.csv"),
+        }
+    )
     result = run_pipeline(cfg)
     out = pd.read_csv(tmp_path / "pred.csv")
     assert len(out) == 2 and "qed" in out.columns
@@ -40,13 +47,45 @@ def test_unknown_config_key():
 def test_cli_train_predict_and_plugin(demo_csv, tmp_path, capsys):
     model_path = tmp_path / "m.joblib"
     plugin = str(EXAMPLES / "plugins" / "custom_featurizer.py")
-    assert main(["--plugin", plugin, "train", "--data", str(demo_csv), "--featurizer",
-                 "atom_pair", "--model", "hist_gb", "--params", json.dumps({"max_iter": 50}),
-                 "--cv", "3", "--out", str(model_path)]) == 0
+    assert (
+        main(
+            [
+                "--plugin",
+                plugin,
+                "train",
+                "--data",
+                str(demo_csv),
+                "--featurizer",
+                "atom_pair",
+                "--model",
+                "hist_gb",
+                "--params",
+                json.dumps({"max_iter": 50}),
+                "--cv",
+                "3",
+                "--out",
+                str(model_path),
+            ]
+        )
+        == 0
+    )
     out_csv = tmp_path / "p.csv"
-    assert main(["--plugin", plugin, "predict", "--model", str(model_path),
-                 "--input", str(EXAMPLES / "data" / "candidates.smi"),
-                 "--out", str(out_csv)]) == 0
+    assert (
+        main(
+            [
+                "--plugin",
+                plugin,
+                "predict",
+                "--model",
+                str(model_path),
+                "--input",
+                str(EXAMPLES / "data" / "candidates.smi"),
+                "--out",
+                str(out_csv),
+            ]
+        )
+        == 0
+    )
     assert len(pd.read_csv(out_csv)) == 4
 
 

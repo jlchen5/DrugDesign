@@ -9,6 +9,8 @@ path = "data/demo_activity.csv"
 smiles_col = "smiles"
 target_col = "pIC50"
 # value_col = "standard_value"   # derive pIC50 from raw nM values (ChEMBL export)
+# unit_col = "standard_units"   # auto-detected for ChEMBL, supports mixed concentration units
+# relation_col = "standard_relation"  # auto-detected: keep only exact '=' measurements
 standardize = true
 aggregate = "median"
 
@@ -18,13 +20,16 @@ estimator = "random_forest"
 params = { n_estimators = 300 }
 test_size = 0.2
 cv_folds = 5
+split_strategy = "scaffold"  # keep Murcko scaffolds disjoint across evaluation partitions
 random_state = 42
 save_path = "../outputs/model.joblib"
+report_path = "../outputs/training_report.json"
 
 [predict]
 input_path = "data/candidates.smi"
 smiles = ["Cc1ccc(cc1)S(=O)(=O)Nc1ccccn1"]   # inline candidates, combined with input_path
 druglikeness = true
+batch_size = 1024
 
 [docking]
 enabled = false                 # needs AutoDock Vina + Meeko/Open Babel installed
@@ -34,5 +39,8 @@ size = [20.0, 20.0, 20.0]
 # reference_ligand = "ligand_in_pocket.sdf"
 exhaustiveness = 8
 num_modes = 9
+cpu = 0
+# timeout = 300.0                # Vina CLI only, seconds
+ranking = "auto"                # higher/lower explicitly overrides target-name inference
 top_n = 10
 output_dir = "../outputs/docking"

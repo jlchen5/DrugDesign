@@ -15,6 +15,7 @@ from rdkit import Chem, DataStructs
 from rdkit.Chem import Descriptors, MACCSkeys, rdFingerprintGenerator
 
 from .registry import Registry
+from .validation import positive_int
 
 FEATURIZERS: Registry["Featurizer"] = Registry("featurizer")
 
@@ -64,8 +65,15 @@ class MorganFingerprint(Featurizer):
 
     name = "morgan"
 
-    def __init__(self, radius: int = 2, n_bits: int = 2048, use_counts: bool = False,
-                 use_chirality: bool = False) -> None:
+    def __init__(
+        self,
+        radius: int = 2,
+        n_bits: int = 2048,
+        use_counts: bool = False,
+        use_chirality: bool = False,
+    ) -> None:
+        positive_int(radius, "radius", minimum=0)
+        positive_int(n_bits, "n_bits")
         self.radius = radius
         self.n_bits = n_bits
         self.use_counts = use_counts
@@ -88,8 +96,12 @@ class MorganFingerprint(Featurizer):
         return self._generator.GetFingerprint(mol)
 
     def get_params(self) -> Dict[str, Any]:
-        return {"radius": self.radius, "n_bits": self.n_bits,
-                "use_counts": self.use_counts, "use_chirality": self.use_chirality}
+        return {
+            "radius": self.radius,
+            "n_bits": self.n_bits,
+            "use_counts": self.use_counts,
+            "use_chirality": self.use_chirality,
+        }
 
     # The RDKit generator is not picklable; rebuild it after unpickling.
     def __getstate__(self):
@@ -132,6 +144,8 @@ class RDKitDescriptors(Featurizer):
         if unknown:
             raise ValueError(f"Unknown RDKit descriptors: {unknown}")
         self.names = list(names)
+        if not self.names:
+            raise ValueError("Select at least one descriptor")
         self._funcs = [available[n] for n in self.names]
 
     @property
@@ -149,9 +163,9 @@ class RDKitDescriptors(Featurizer):
                 values.append(float(func(mol)))
             except Exception:
                 values.append(np.nan)
-        # Some descriptors overflow on exotic molecules; keep them finite.
-        return np.nan_to_num(np.asarray(values, dtype=np.float64),
-                             nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+        # Preserve failures: callers reject the row instead of inventing zero values.
+        with np.errstate(over="ignore"):
+            return np.asarray(values, dtype=np.float32)
 
     def get_params(self) -> Dict[str, Any]:
         return {"names": self.names}
@@ -168,9 +182,18 @@ class RDKitDescriptors(Featurizer):
 
 
 # A compact, interpretable descriptor set (Lipinski/Veber properties).
-BASIC_DESCRIPTORS = ["MolWt", "MolLogP", "TPSA", "NumHDonors", "NumHAcceptors",
-                     "NumRotatableBonds", "RingCount", "NumAromaticRings",
-                     "FractionCSP3", "HeavyAtomCount"]
+BASIC_DESCRIPTORS = [
+    "MolWt",
+    "MolLogP",
+    "TPSA",
+    "NumHDonors",
+    "NumHAcceptors",
+    "NumRotatableBonds",
+    "RingCount",
+    "NumAromaticRings",
+    "FractionCSP3",
+    "HeavyAtomCount",
+]
 
 
 @FEATURIZERS.register("basic_descriptors")
@@ -216,13 +239,14 @@ def build_featurizer(spec: FeaturizerSpec) -> Featurizer:
     an existing :class:`Featurizer`, or a list of any of these (concatenated).
     """
     if isinstance(spec, Featurizer):
+        positive_int(spec.n_features, "n_features")
         return spec
     if isinstance(spec, str):
         return FEATURIZERS.create(spec)
     if isinstance(spec, dict):
         params = dict(spec)
         name = params.pop("name", None)
-        if name is None:
+        if not isinstance(name, str) or not name.strip():
             raise ValueError(f"Featurizer spec needs a 'name' key: {spec}")
         return FEATURIZERS.create(name, **params)
     if isinstance(spec, (list, tuple)):

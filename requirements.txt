@@ -1,6 +1,6 @@
 numpy>=1.22
 pandas>=1.5
-rdkit>=2023.9
+rdkit>=2023.9.1
 scikit-learn>=1.2
 joblib>=1.2
 tomli>=2.0; python_version < "3.11"

@@ -3,8 +3,15 @@ import shutil
 import pytest
 from rdkit import Chem
 
-from drugdesign.docking import (DockingBox, DockingError, dock_smiles, docking_available,
-                                embed_ligand, parse_vina_output, prepare_receptor)
+from drugdesign.docking import (
+    DockingBox,
+    DockingError,
+    dock_smiles,
+    docking_available,
+    embed_ligand,
+    parse_vina_output,
+    prepare_receptor,
+)
 
 VINA_STDOUT = """\
 Performing docking (random seed: 42) ... done.
@@ -54,8 +61,10 @@ def test_prepare_receptor_missing_file(tmp_path):
         prepare_receptor(tmp_path / "missing.pdb")
 
 
-@pytest.mark.skipif(not (docking_available() and shutil.which("obabel")),
-                    reason="AutoDock Vina / Open Babel not installed")
+@pytest.mark.skipif(
+    not (docking_available() and shutil.which("obabel")),
+    reason="AutoDock Vina / Open Babel not installed",
+)
 def test_dock_smiles_end_to_end(tmp_path):
     from rdkit.Chem import AllChem
 
@@ -65,7 +74,13 @@ def test_dock_smiles_end_to_end(tmp_path):
     Chem.MolToPDBFile(peptide, str(pdb))
     receptor = prepare_receptor(pdb, tmp_path / "receptor.pdbqt")
     center = tuple(peptide.GetConformer().GetPositions().mean(axis=0))
-    result = dock_smiles("c1ccccc1O", receptor, DockingBox(center, (24, 24, 24)), tmp_path,
-                         exhaustiveness=1, num_modes=3)
+    result = dock_smiles(
+        "c1ccccc1O",
+        receptor,
+        DockingBox(center, (24, 24, 24)),
+        tmp_path,
+        exhaustiveness=1,
+        num_modes=3,
+    )
     assert result.poses and result.best_affinity < 0
     assert result.output_path.exists()

@@ -6,3 +6,7 @@ dist/
 .pytest_cache/
 outputs/
 *.joblib
+.venv/
+.ruff_cache/
+.coverage
+htmlcov/

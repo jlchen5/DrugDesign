@@ -4,8 +4,13 @@ import numpy as np
 import pytest
 from rdkit import Chem
 
-from drugdesign.features import (FEATURIZERS, CombinedFeaturizer, MorganFingerprint,
-                                 RDKitDescriptors, build_featurizer)
+from drugdesign.features import (
+    FEATURIZERS,
+    CombinedFeaturizer,
+    MorganFingerprint,
+    RDKitDescriptors,
+    build_featurizer,
+)
 
 MOLS = [Chem.MolFromSmiles(s) for s in ["CCO", "c1ccccc1O"]] + [None]
 

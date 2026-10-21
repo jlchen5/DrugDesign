@@ -2,8 +2,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from drugdesign.data import (clean_dataset, load_activity_data, read_smiles_file,
-                             standardize_smiles, to_pactivity)
+from drugdesign.data import (
+    clean_dataset,
+    load_activity_data,
+    read_smiles_file,
+    standardize_smiles,
+    to_pactivity,
+)
 
 
 def test_to_pactivity_units():
@@ -34,8 +39,9 @@ def test_load_and_clean(demo_csv):
 
 def test_load_derives_pic50_from_raw_values(tmp_path):
     path = tmp_path / "chembl.csv"
-    pd.DataFrame({"canonical_smiles": ["CCO", "CCN"], "standard_value": [100.0, 10.0]}) \
-        .to_csv(path, index=False)
+    pd.DataFrame({"canonical_smiles": ["CCO", "CCN"], "standard_value": [100.0, 10.0]}).to_csv(
+        path, index=False
+    )
     df = load_activity_data(path, smiles_col="canonical_smiles", value_col="standard_value")
     np.testing.assert_allclose(df["pIC50"], [7.0, 8.0])
 

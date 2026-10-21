@@ -1,18 +1,19 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "drugdesign"
-version = "0.2.0"
+version = "0.3.0"
 description = "A Python framework for QSAR activity prediction and docking-based virtual screening"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { file = "LICENSE" }
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
 dependencies = [
     "numpy>=1.22",
     "pandas>=1.5",
-    "rdkit>=2023.9",
+    "rdkit>=2023.9.1",
     "scikit-learn>=1.2",
     "joblib>=1.2",
     "tomli>=2.0; python_version < '3.11'",
@@ -20,7 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 docking = ["vina>=1.2.5", "meeko>=0.5"]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "ruff>=0.9", "build>=1.2"]
 
 [project.scripts]
 drugdesign = "drugdesign.cli:main"
@@ -30,3 +31,10 @@ include = ["drugdesign*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
+from rdkit import Chem
 
 from drugdesign.filters import druglikeness_profile, druglikeness_table, passes_filters
 from drugdesign.models import MODELS, QSARModel, regression_metrics
-from rdkit import Chem
 
 
 def test_regression_metrics_perfect():
@@ -14,8 +14,9 @@ def test_regression_metrics_perfect():
 @pytest.mark.parametrize("estimator", ["random_forest", "ridge", "knn"])
 def test_train_predict_roundtrip(demo_data, tmp_path, estimator):
     model = QSARModel("morgan", estimator, random_state=0)
-    report = model.train_and_evaluate(demo_data["smiles"], demo_data["pIC50"],
-                                      test_size=0.2, cv_folds=3)
+    report = model.train_and_evaluate(
+        demo_data["smiles"], demo_data["pIC50"], test_size=0.2, cv_folds=3
+    )
     assert report.n_test > 0 and "rmse" in report.test_metrics and "r2" in report.cv_metrics
 
     preds = model.predict(["CCOc1ccccc1NC(=O)C", "invalid"])
@@ -33,8 +34,9 @@ def test_train_predict_roundtrip(demo_data, tmp_path, estimator):
 def test_descriptor_model_is_deterministic(demo_data):
     preds = []
     for _ in range(2):
-        model = QSARModel(["basic_descriptors"], "random_forest",
-                          {"n_estimators": 50}, random_state=1)
+        model = QSARModel(
+            ["basic_descriptors"], "random_forest", {"n_estimators": 50}, random_state=1
+        )
         model.fit(demo_data["smiles"], demo_data["pIC50"])
         preds.append(model.predict(["c1ccccc1O"]))
     np.testing.assert_allclose(*preds)
